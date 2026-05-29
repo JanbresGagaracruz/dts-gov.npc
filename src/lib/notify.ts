@@ -1,27 +1,34 @@
+// src/lib/notify.ts
 import { prisma } from "@/lib/prisma";
 
 interface NotifyParams {
   userId: string;
-  type:   string;
-  title:  string;
-  body:   string;
-  link?:  string;
+  type: string;
+  title: string;
+  body: string;
+  link?: string;
 }
 
-export async function notify({ userId, type, title, body, link }: NotifyParams) {
-  const notification = await (prisma as any).notification.create({
+export async function notify({
+  userId,
+  type,
+  title,
+  body,
+  link,
+}: NotifyParams) {
+  const notification = await prisma.notification.create({
     data: { userId, type, title, body, link: link ?? null },
   });
 
   const io = (global as any)._io;
   if (io) {
     io.to(`user:${userId}`).emit("notification", {
-      id:        notification.id,
+      id: notification.id,
       type,
       title,
       body,
-      link:      link ?? null,
-      isRead:    false,
+      link: link ?? null,
+      isRead: false,
       createdAt: notification.createdAt,
     });
   }
@@ -34,14 +41,23 @@ export async function notifyAdmins(params: Omit<NotifyParams, "userId">) {
     where: { accessLevel: { gte: 3 }, isActive: true },
     select: { id: true },
   });
-  await Promise.allSettled(admins.map((a) => notify({ ...params, userId: a.id })));
+  await Promise.allSettled(
+    admins.map((a) => notify({ ...params, userId: a.id })),
+  );
 }
 
-export async function notifyWarehouseManagers(warehouseId: string, params: Omit<NotifyParams, "userId">) {
-  // Exclude admins (accessLevel >= 3) — they already receive these via notifyAdmins
-  const managers = await prisma.user.findMany({
-    where: { assignedWarehouseId: warehouseId, isActive: true, accessLevel: { lt: 3 } },
+export async function notifyDepartment(
+  departmentId: string,
+  params: Omit<NotifyParams, "userId">,
+  excludeUserId?: string,
+) {
+  const members = await prisma.user.findMany({
+    where: { departmentId, isActive: true },
     select: { id: true },
   });
-  await Promise.allSettled(managers.map((m) => notify({ ...params, userId: m.id })));
+  await Promise.allSettled(
+    members
+      .filter((m) => m.id !== excludeUserId)
+      .map((m) => notify({ ...params, userId: m.id })),
+  );
 }

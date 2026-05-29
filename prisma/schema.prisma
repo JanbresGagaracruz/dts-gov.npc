@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -13,30 +7,214 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ─── DEPARTMENT ───────────────────────────────────────────────────────────────
+model Department {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  name        String   @unique
+  code        String   @unique          // e.g. "LEGAL", "FINANCE"
+  description String?
+  headId      String?  @db.ObjectId     // dept head user (optional)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
+  users            User[]
+  originDocuments  Document[]       @relation("OriginDepartment")
+  routesFrom       DocumentRoute[]  @relation("RouteFromDept")
+  routesTo         DocumentRoute[]  @relation("RouteToDept")
+  addressees       DocumentAddressee[]
+
+  @@map("Departments")
+}
+
+// ─── USER ─────────────────────────────────────────────────────────────────────
 model User {
-  id       String @id @default(auto()) @map("_id") @db.ObjectId
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  username     String   @unique
+  email        String   @unique
+  password     String
+  firstName    String?
+  lastName     String?
 
-  username String @unique
-  email    String @unique
-  password String
+  // accessLevel: 1=Viewer 2=Staff/Signatory 3=DeptAdmin 4=SuperAdmin
+  accessLevel  Int      @default(1)
+  role         String   @default("VIEWER") // VIEWER | STAFF | SIGNATORY | DEPT_ADMIN | SUPER_ADMIN
+  isActive     Boolean  @default(true)
 
-  firstName String?
-  lastName  String?
-
-  role        String  @default("VIEWER") // "ADMIN" | "DEPARTMENT_MANAGER" | "DIVISION_MANAGER" | "MANAGER" | "SCANNER" | "VIEWER"
-  accessLevel Int     @default(1)        // 1=Viewer 2=Staff 3=Admin 4=Super Admin
-  isActive    Boolean @default(true)
-
-  assignedWarehouseId String? @db.ObjectId
-  scopeDepartmentId   String? @db.ObjectId // scopes DEPARTMENT_MANAGER to one dept
-  scopeDivisionId     String? @db.ObjectId // scopes DIVISION_MANAGER to one division
+  departmentId String?  @db.ObjectId
+  department   Department? @relation(fields: [departmentId], references: [id])
 
   passwordResetToken   String?
   passwordResetExpires DateTime?
-
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  createdDocuments     Document[]        @relation("DocumentCreator")
+  currentHolderDocs    Document[]        @relation("CurrentHolder")
+  versionCreator       DocumentVersion[] @relation("VersionCreator")
+  signatories          Signatory[]
+  routesFromUser       DocumentRoute[]   @relation("RouteFromUser")
+  routesToUser         DocumentRoute[]   @relation("RouteToUser")
+  auditLogs            AuditLog[]
+  notifications        Notification[]
+  addresseeUsers       DocumentAddressee[]
+
   @@map("Users")
+}
+
+// ─── DOCUMENT ─────────────────────────────────────────────────────────────────
+model Document {
+  id             String   @id @default(auto()) @map("_id") @db.ObjectId
+  trackingNumber String   @unique          // auto-generated e.g. DTS-2025-000001
+
+  // Core metadata — only static fields live here; versioned content is in DocumentVersion
+  originDepartmentId   String   @db.ObjectId
+  originDepartment     Department @relation("OriginDepartment", fields: [originDepartmentId], references: [id])
+
+  createdById    String   @db.ObjectId
+  createdBy      User     @relation("DocumentCreator", fields: [createdById], references: [id])
+
+  // Current routing state (denormalized for fast queries)
+  currentHolderId        String?  @db.ObjectId
+  currentHolder          User?    @relation("CurrentHolder", fields: [currentHolderId], references: [id])
+  currentHolderDeptId    String?  @db.ObjectId  // redundant but handy for dept-level filtering
+
+  status         String   @default("DRAFT")
+  // DRAFT | IN_PROGRESS | FOR_APPROVAL | APPROVED | REJECTED | COMPLETED | ARCHIVED
+
+  priority       String   @default("NORMAL")    // LOW | NORMAL | HIGH | URGENT
+  confidentiality String  @default("INTERNAL")  // PUBLIC | INTERNAL | CONFIDENTIAL | SECRET
+
+  isDeleted      Boolean  @default(false)        // soft delete
+  deletedAt      DateTime?
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  versions       DocumentVersion[]
+  addressees     DocumentAddressee[]
+
+  @@map("Documents")
+}
+
+// ─── DOCUMENT VERSION (immutable) ─────────────────────────────────────────────
+model DocumentVersion {
+  id             String   @id @default(auto()) @map("_id") @db.ObjectId
+  documentId     String   @db.ObjectId
+  document       Document @relation(fields: [documentId], references: [id])
+
+  versionNumber  Int                            // 1, 2, 3 …
+  subject        String
+  body           String?                        // rich text / content
+  remarks        String?                        // reason for this revision
+  attachments    String[]                       // file URLs/paths
+
+  isCurrentVersion Boolean @default(false)
+
+  createdById    String   @db.ObjectId
+  createdBy      User     @relation("VersionCreator", fields: [createdById], references: [id])
+  createdAt      DateTime @default(now())
+
+  routes         DocumentRoute[]
+  signatories    Signatory[]
+
+  @@unique([documentId, versionNumber])
+  @@map("DocumentVersions")
+}
+
+// ─── DOCUMENT ROUTE (immutable audit trail) ───────────────────────────────────
+model DocumentRoute {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  documentVersionId String   @db.ObjectId
+  documentVersion   DocumentVersion @relation(fields: [documentVersionId], references: [id])
+
+  fromDepartmentId  String?  @db.ObjectId
+  fromDepartment    Department? @relation("RouteFromDept", fields: [fromDepartmentId], references: [id])
+  toDepartmentId    String?  @db.ObjectId
+  toDepartment      Department? @relation("RouteToDept", fields: [toDepartmentId], references: [id])
+
+  fromUserId        String?  @db.ObjectId
+  fromUser          User?    @relation("RouteFromUser", fields: [fromUserId], references: [id])
+  toUserId          String?  @db.ObjectId
+  toUser            User?    @relation("RouteToUser", fields: [toUserId], references: [id])
+
+  action            String                      // FORWARDED | RECEIVED | APPROVED | REJECTED | RETURNED | COMPLETED
+  remarks           String?
+  timestamp         DateTime @default(now())
+
+  @@map("DocumentRoutes")
+}
+
+// ─── SIGNATORY ────────────────────────────────────────────────────────────────
+model Signatory {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  documentVersionId String   @db.ObjectId
+  documentVersion   DocumentVersion @relation(fields: [documentVersionId], references: [id])
+
+  userId            String   @db.ObjectId
+  user              User     @relation(fields: [userId], references: [id])
+
+  order             Int                         // signing sequence
+  status            String   @default("PENDING") // PENDING | APPROVED | REJECTED
+  signedAt          DateTime?
+  remarks           String?
+
+  @@map("Signatories")
+}
+
+// ─── DOCUMENT ADDRESSEE ───────────────────────────────────────────────────────
+model DocumentAddressee {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  documentId   String   @db.ObjectId
+  document     Document @relation(fields: [documentId], references: [id])
+
+  departmentId String?  @db.ObjectId
+  department   Department? @relation(fields: [departmentId], references: [id])
+  userId       String?  @db.ObjectId
+  user         User?    @relation(fields: [userId], references: [id])
+
+  @@map("DocumentAddressees")
+}
+
+// ─── AUDIT LOG (immutable) ────────────────────────────────────────────────────
+model AuditLog {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  user      User     @relation(fields: [userId], references: [id])
+
+  action    String                              // DOCUMENT_CREATED | VERSION_CREATED | ROUTED | APPROVED | REJECTED | VIEWED | DOWNLOADED | COMPLETED
+  entity    String                              // "Document" | "DocumentVersion" | "Signatory"
+  entityId  String   @db.ObjectId
+  metadata  Json?                               // extra context (e.g. previous status)
+
+  ipAddress String?
+  timestamp DateTime @default(now())
+
+  @@map("AuditLogs")
+}
+
+// ─── NOTIFICATION ─────────────────────────────────────────────────────────────
+model Notification {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  user      User     @relation(fields: [userId], references: [id])
+
+  type      String
+  title     String
+  body      String
+  link      String?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@map("Notifications")
+}
+
+// ─── SYSTEM SETTINGS ──────────────────────────────────────────────────────────
+model SystemSettings {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  orgName   String   @default("NPC")
+  orgAddress String  @default("")
+  updatedAt DateTime @updatedAt
+
+  @@map("SystemSettings")
 }

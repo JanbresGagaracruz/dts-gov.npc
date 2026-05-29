@@ -6,6 +6,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Eye, EyeOff, ArrowRight, AlertCircle } from "lucide-react";
 import Image from "next/image";
+import { Syne, DM_Sans } from "next/font/google";
+
+const syne = Syne({ subsets: ["latin"], variable: "--font-syne" });
+const dmSans = DM_Sans({ subsets: ["latin"], variable: "--font-dm" });
 
 const ERROR_DISMISS_MS = 5000;
 const EASE: [number, number, number, number] = [0.22, 1, 0.36, 1];
@@ -49,15 +53,17 @@ const errorAnim = {
 
 export default function LoginPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen flex items-center justify-center bg-[#080a0f]">
-          <div className="w-5 h-5 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
-        </div>
-      }
-    >
-      <LoginContent />
-    </Suspense>
+    <div className={`${syne.variable} ${dmSans.variable}`}>
+      <Suspense
+        fallback={
+          <div className="min-h-screen flex items-center justify-center bg-white">
+            <div className="w-5 h-5 border-2 border-[var(--accent)] border-t-transparent rounded-full animate-spin" />
+          </div>
+        }
+      >
+        <LoginContent />
+      </Suspense>
+    </div>
   );
 }
 
@@ -74,13 +80,16 @@ function Field({
 }) {
   return (
     <div className="space-y-1.5">
-      <label className="block text-[11px] font-600 text-[var(--text-secondary)] uppercase tracking-[0.1em]">
+      <label
+        className="block text-[11px] font-semibold uppercase tracking-[0.1em]"
+        style={{ fontFamily: "var(--font-dm)", color: "var(--text-muted)" }}
+      >
         {label}
       </label>
       <motion.div
         animate={{
           boxShadow: focused
-            ? "0 0 0 3px rgba(91,138,240,0.15), 0 1px 3px rgba(0,0,0,0.08)"
+            ? "0 0 0 3px rgba(91,138,240,0.15), 0 1px 3px rgba(0,0,0,0.06)"
             : "0 0 0 0px transparent, 0 1px 2px rgba(0,0,0,0.04)",
         }}
         transition={{ duration: 0.15, ease: "easeOut" }}
@@ -136,68 +145,97 @@ function LoginContent() {
   };
 
   return (
-    <div className="min-h-screen flex overflow-hidden">
-      {/* ── Left — image panel ─────────────────────────────────────────── */}
+    <div className="min-h-screen flex overflow-hidden bg-white">
+      {/* ── Left — illustration panel ──────────────────────────────────── */}
       <motion.div
         variants={leftPanel}
         initial="hidden"
         animate="visible"
-        className="hidden lg:block lg:w-1/2 relative"
+        className="hidden lg:flex lg:w-1/2 flex-col border-r"
+        style={{
+          background: "var(--bg-tertiary)",
+          borderColor: "var(--border)",
+        }}
       >
-        <img
-          src="/undraw_budgeting_klon.svg"
-          alt=""
-          className="absolute inset-0 w-full h-full object-cover"
-        />
-        {/* Overlay — darker on edges, lets the image breathe in the center */}
-        <div className="absolute inset-0 bg-gradient-to-r from-[#06080e]/80 via-[#06080e]/40 to-[#06080e]/70" />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#06080e]/70 via-transparent to-[#06080e]/50" />
-
         {/* Top-left org mark */}
-        <div className="absolute top-10 left-10 flex items-center gap-3">
-          <Image
-            src="/npc-big-logo.png"
-            alt="NPC"
-            width={38}
-            height={38}
-            className="opacity-90"
-          />
+        <div className="flex items-center gap-3 px-10 pt-10">
+          <Image src="/npc-big-logo.png" alt="NPC" width={36} height={36} />
           <div>
-            <p className="text-white/85 font-600 text-[13px] leading-tight">
+            <p
+              className="text-[13px] font-semibold leading-tight"
+              style={{
+                fontFamily: "var(--font-dm)",
+                color: "var(--text-primary)",
+              }}
+            >
               National Power Corporation
             </p>
-            <p className="text-white/35 text-[11px]">{"DTS"}</p>
+            <p
+              className="text-[11px] font-medium"
+              style={{ fontFamily: "var(--font-dm)", color: "var(--accent)" }}
+            >
+              DTS
+            </p>
           </div>
         </div>
 
-        {/* Centre headline */}
+        {/* Centre content */}
         <motion.div
           variants={stagger}
           initial="hidden"
           animate="visible"
-          className="absolute inset-0 flex flex-col justify-center px-14"
+          className="flex-1 flex flex-col items-center justify-center px-12 pb-10"
         >
-          <motion.h1
+          {/* Headline */}
+          <motion.div variants={item} className="text-center mb-10">
+            <h1
+              className="text-3xl xl:text-4xl font-bold leading-tight"
+              style={{
+                fontFamily: "var(--font-syne)",
+                color: "var(--text-primary)",
+              }}
+            >
+              Document Tracking
+              <br />
+              <span style={{ color: "var(--accent)" }}>Management</span>
+              <br />
+              System
+            </h1>
+            <p
+              className="mt-4 text-sm leading-relaxed max-w-[240px] mx-auto"
+              style={{
+                fontFamily: "var(--font-dm)",
+                color: "var(--text-muted)",
+              }}
+            >
+              Centralize your document tracking and management in one place.
+            </p>
+          </motion.div>
+
+          {/* Illustration */}
+          <motion.div
             variants={item}
-            className="font-display font-800 text-4xl xl:text-5xl leading-tight text-white"
+            className="w-full max-w-[320px] xl:max-w-[380px]"
           >
-            Document Tracking
-            <br />
-            <span className="text-green-400">Management</span>
-            <br />
-            System
-          </motion.h1>
-          <motion.p
-            variants={item}
-            className="text-white/55 mt-5 text-sm leading-relaxed max-w-xs"
-          >
-            Centralize your document tracking and management in one place.
-          </motion.p>
+            <img
+              src="/undraw_budgeting_klon.svg"
+              alt="Budgeting illustration"
+              className="w-full h-auto object-contain"
+              style={{ maxHeight: "300px" }}
+            />
+          </motion.div>
         </motion.div>
 
-        {/* Bottom-left copyright */}
-        <div className="absolute bottom-10 left-10">
-          <p className="text-white/25 text-[11px]">
+        {/* Bottom copyright */}
+        <div className="px-10 pb-8">
+          <p
+            className="text-[11px]"
+            style={{
+              fontFamily: "var(--font-dm)",
+              color: "var(--text-muted)",
+              opacity: 0.5,
+            }}
+          >
             © {new Date().getFullYear()} NPC · Document Tracking System
           </p>
         </div>
@@ -208,8 +246,22 @@ function LoginContent() {
         variants={rightPanel}
         initial="hidden"
         animate="visible"
-        className="flex-1 flex flex-col bg-[var(--bg-primary)] min-h-screen"
+        className="flex-1 flex flex-col min-h-screen bg-white"
       >
+        {/* Mobile-only logo */}
+        <div className="lg:hidden flex items-center gap-3 px-8 pt-8">
+          <Image src="/npc-big-logo.png" alt="NPC" width={30} height={30} />
+          <p
+            className="text-sm font-semibold"
+            style={{
+              fontFamily: "var(--font-dm)",
+              color: "var(--text-primary)",
+            }}
+          >
+            National Power Corporation
+          </p>
+        </div>
+
         {/* Centred form area */}
         <div className="flex-1 flex items-center justify-center px-8 py-12">
           <motion.div
@@ -220,10 +272,22 @@ function LoginContent() {
           >
             {/* Heading */}
             <motion.div variants={item} className="mb-9">
-              <h1 className="text-[1.75rem] font-display font-700 text-[var(--text-primary)] leading-tight tracking-tight">
+              <h1
+                className="text-[1.75rem] font-bold leading-tight tracking-tight"
+                style={{
+                  fontFamily: "var(--font-syne)",
+                  color: "var(--text-primary)",
+                }}
+              >
                 Sign in
               </h1>
-              <p className="text-[13px] text-[var(--text-muted)] mt-2 leading-relaxed">
+              <p
+                className="text-[13px] mt-2 leading-relaxed"
+                style={{
+                  fontFamily: "var(--font-dm)",
+                  color: "var(--text-muted)",
+                }}
+              >
                 Enter your credentials to access the system.
               </p>
             </motion.div>
@@ -237,20 +301,31 @@ function LoginContent() {
                   initial="hidden"
                   animate="visible"
                   exit="exit"
-                  className="mb-6 rounded-lg border border-red-500/20 bg-red-500/[0.06] p-3.5 overflow-hidden"
+                  className="mb-6 rounded-lg p-3.5 overflow-hidden"
+                  style={{
+                    border: "1px solid rgba(224,59,59,0.2)",
+                    background: "rgba(224,59,59,0.05)",
+                  }}
                 >
                   <div className="flex items-start gap-2.5">
                     <AlertCircle
                       size={14}
-                      className="text-red-400 shrink-0 mt-0.5"
+                      className="shrink-0 mt-0.5"
+                      style={{ color: "var(--danger)" }}
                     />
-                    <p className="text-[13px] text-red-400 leading-snug">
+                    <p
+                      className="text-[13px] leading-snug"
+                      style={{
+                        fontFamily: "var(--font-dm)",
+                        color: "var(--danger)",
+                      }}
+                    >
                       {error}
                     </p>
                   </div>
-                  {/* Countdown bar */}
                   <motion.div
-                    className="h-px bg-red-500/30 mt-3 origin-left"
+                    className="h-px mt-3 origin-left"
+                    style={{ background: "var(--danger)", opacity: 0.25 }}
                     initial={{ scaleX: 1 }}
                     animate={{ scaleX: 0 }}
                     transition={{
@@ -298,7 +373,8 @@ function LoginContent() {
                         type="button"
                         tabIndex={-1}
                         onClick={() => setShowPw((v) => !v)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors"
+                        style={{ color: "var(--text-muted)" }}
                       >
                         <AnimatePresence mode="wait" initial={false}>
                           <motion.span
@@ -321,11 +397,12 @@ function LoginContent() {
                     type="submit"
                     disabled={loading}
                     whileTap={{ scale: loading ? 1 : 0.985 }}
-                    className="w-full btn-primary justify-center py-2.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="btn-primary w-full justify-center py-2.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{ fontFamily: "var(--font-dm)" }}
                   >
                     {loading ? (
                       <span className="inline-flex items-center gap-2">
-                        <span className="w-3.5 h-3.5 border-2 border-white/25 border-t-white rounded-full animate-spin" />
+                        <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                         Signing in…
                       </span>
                     ) : (

@@ -1,3 +1,4 @@
+// src/lib/auth.ts
 import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { prisma } from "./prisma";
@@ -12,7 +13,7 @@ export const authOptions: NextAuthOptions = {
     CredentialsProvider({
       name: "Credentials",
       credentials: {
-        email: { label: "Email", type: "text" },
+        email: { label: "Username / Email", type: "text" },
         password: { label: "Password", type: "password" },
       },
 
@@ -22,54 +23,47 @@ export const authOptions: NextAuthOptions = {
         // Rate limit: 10 login attempts per minute per IP
         try {
           const ip =
-            (req?.headers?.["x-forwarded-for"] as string)?.split(",")[0]?.trim() ||
+            (req?.headers?.["x-forwarded-for"] as string)
+              ?.split(",")[0]
+              ?.trim() ||
             (req?.headers?.["x-real-ip"] as string) ||
             "unknown";
-          const key   = `rl:login:${ip}`;
+          const key = `rl:login:${ip}`;
           const count = await redis.incr(key);
           if (count === 1) await redis.expire(key, 60);
           if (count > 10) return null;
-        } catch { /* Redis unavailable — fail open */ }
+        } catch {
+          /* fail open */
+        }
 
         const user = await prisma.user.findFirst({
           where: {
-            email: credentials.email,
+            OR: [{ email: credentials.email }, { username: credentials.email }],
+          },
+          include: {
+            department: { select: { id: true, name: true, code: true } },
           },
         });
 
-        if (!user) return null;
+        if (!user || !user.isActive) return null;
 
-        const passwordField = user.password || "";
         const isValid = await bcrypt.compare(
           credentials.password,
-          passwordField,
+          user.password || "",
         );
         if (!isValid) return null;
 
-        const u = user as any;
-
-        let scopeDivisionName:   string | null = null;
-        let scopeDepartmentName: string | null = null;
-        if (u.scopeDivisionId) {
-          const div  = await prisma.division.findUnique({ where: { id: u.scopeDivisionId },   select: { name: true } }).catch(() => null);
-          scopeDivisionName = div?.name ?? null;
-        }
-        if (u.scopeDepartmentId) {
-          const dept = await prisma.department.findUnique({ where: { id: u.scopeDepartmentId }, select: { name: true } }).catch(() => null);
-          scopeDepartmentName = dept?.name ?? null;
-        }
-
         return {
-          id: String(u.id),
-          name: u.firstName + " " + u.lastName,
-          email: u.email || "",
-          accessLevel: u.accessLevel ?? 1,
-          role: u.role ?? "VIEWER",
-          scopeDepartmentId:   u.scopeDepartmentId   ?? null,
-          scopeDivisionId:     u.scopeDivisionId     ?? null,
-          scopeDivisionName,
-          scopeDepartmentName,
-          username: u.username,
+          id: String(user.id),
+          name:
+            [user.firstName, user.lastName].filter(Boolean).join(" ") ||
+            user.username,
+          email: user.email || "",
+          username: user.username,
+          accessLevel: user.accessLevel ?? 1,
+          role: user.role ?? "VIEWER",
+          departmentId: user.departmentId ?? null,
+          department: user.department ?? null,
         };
       },
     }),
@@ -78,18 +72,16 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.id                  = user.id;
-        token.accessLevel         = (user as any).accessLevel;
-        token.role                = (user as any).role;
-        token.scopeDepartmentId   = (user as any).scopeDepartmentId;
-        token.scopeDivisionId     = (user as any).scopeDivisionId;
-        token.scopeDivisionName   = (user as any).scopeDivisionName;
-        token.scopeDepartmentName = (user as any).scopeDepartmentName;
-        token.username            = (user as any).username;
+        token.id = user.id;
+        token.accessLevel = (user as any).accessLevel;
+        token.role = (user as any).role;
+        token.username = (user as any).username;
+        token.departmentId = (user as any).departmentId;
+        token.department = (user as any).department;
         return token;
       }
 
-      // Check if an admin has changed this user's access/scope since they last logged in
+      // Force-logout check (admin changed scope)
       if (token.id) {
         try {
           const flag = await redis.get(`force_logout:${token.id as string}`);
@@ -97,25 +89,24 @@ export const authOptions: NextAuthOptions = {
             await redis.del(`force_logout:${token.id as string}`);
             return { ...token, requireReauth: true };
           }
-        } catch { /* Redis unavailable — fail open */ }
+        } catch {
+          /* fail open */
+        }
       }
 
       return token;
     },
+
     async session({ session, token }) {
       if (token) {
-        session.user.id                  = token.id as string;
-        session.user.accessLevel         = token.accessLevel as number;
-        session.user.role                = token.role as string;
-        session.user.scopeDepartmentId   = token.scopeDepartmentId   as string | null;
-        session.user.scopeDivisionId     = token.scopeDivisionId     as string | null;
-        session.user.scopeDivisionName   = token.scopeDivisionName   as string | null;
-        session.user.scopeDepartmentName = token.scopeDepartmentName as string | null;
-        session.user.username            = token.username as string;
-        // Signal the client to sign out — admin changed this user's access or scope
-        if ((token as any).requireReauth) {
+        session.user.id = token.id as string;
+        session.user.accessLevel = token.accessLevel as number;
+        session.user.role = token.role as string;
+        session.user.username = token.username as string;
+        (session.user as any).departmentId = token.departmentId;
+        (session.user as any).department = token.department;
+        if ((token as any).requireReauth)
           (session as any).error = "requireReauth";
-        }
       }
       return session;
     },
