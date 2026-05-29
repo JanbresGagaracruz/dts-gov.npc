@@ -1,0 +1,42 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+
+model User {
+  id       String @id @default(auto()) @map("_id") @db.ObjectId
+
+  username String @unique
+  email    String @unique
+  password String
+
+  firstName String?
+  lastName  String?
+
+  role        String  @default("VIEWER") // "ADMIN" | "DEPARTMENT_MANAGER" | "DIVISION_MANAGER" | "MANAGER" | "SCANNER" | "VIEWER"
+  accessLevel Int     @default(1)        // 1=Viewer 2=Staff 3=Admin 4=Super Admin
+  isActive    Boolean @default(true)
+
+  assignedWarehouseId String? @db.ObjectId
+  scopeDepartmentId   String? @db.ObjectId // scopes DEPARTMENT_MANAGER to one dept
+  scopeDivisionId     String? @db.ObjectId // scopes DIVISION_MANAGER to one division
+
+  passwordResetToken   String?
+  passwordResetExpires DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("Users")
+}
